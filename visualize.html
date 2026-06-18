@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎵 Spotify Clean Audio Insights Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --spotify-green: #1db954;
+    --pastel-coral: #ff7675;
+    --pastel-teal: #00cec9;
+    --pastel-yellow: #ffeaa7;
+    --pastel-purple: #a29bfe;
+    --pastel-pink: #fd79a8;
+    --pastel-orange: #fab1a0;
+    --pastel-blue: #74b9ff;
+    --text-main: #2d3436;
+    --text-muted: #636e72;
+    --border-color: #dfe6e9;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    display: flex;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+    width: 290px; flex-shrink: 0; background: var(--card-bg);
+    border-right: 1px solid var(--border-color); height: 100vh;
+    overflow-y: auto; position: sticky; top: 0; padding: 22px 0 40px;
+    transition: margin-left 0.25s ease;
+}
+.sidebar.collapsed { margin-left: -290px; }
+.sidebar-header {
+    padding: 0 20px 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 10px;
+}
+.sidebar-header h2 { font-size: 15px; margin: 0 0 3px 0; color: var(--spotify-green); }
+.sidebar-header p { font-size: 11.5px; color: var(--text-muted); margin: 0; }
+
+.sidebar-item { border-bottom: 1px solid #f1f2f6; }
+.sidebar-item-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 20px;
+    cursor: pointer; transition: background 0.15s; user-select: none;
+}
+.sidebar-item-head:hover { background: #f8fafc; }
+.sidebar-item-head .ic { font-size: 17px; width: 22px; text-align: center; flex-shrink:0; }
+.sidebar-item-head .lbl { font-size: 13.5px; font-weight: 600; flex: 1; }
+.sidebar-item-head .chev { font-size: 11px; color: var(--text-muted); transition: transform 0.2s; }
+.sidebar-item.expanded .chev { transform: rotate(90deg); }
+.sidebar-item.active-item .sidebar-item-head { background: #e8f9ed; }
+.sidebar-item.active-item .sidebar-item-head .lbl { color: var(--spotify-green); }
+
+.sidebar-examples {
+    max-height: 0; overflow: hidden; transition: max-height 0.25s ease;
+    padding: 0 20px 0 52px;
+}
+.sidebar-item.expanded .sidebar-examples { max-height: 220px; padding-bottom: 10px; }
+.sidebar-example {
+    font-size: 12px; color: var(--text-muted); padding: 7px 10px; margin: 4px 0;
+    background: #f1f2f6; border-radius: 8px; cursor: pointer; transition: all 0.15s;
+}
+.sidebar-example:hover { background: var(--spotify-green); color: white; }
+
+/* ===== MAIN CONTENT ===== */
+.main-content { flex: 1; min-width: 0; padding: 24px 28px; }
+.container { max-width: 1100px; margin: 0 auto; }
+
+.top-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.sidebar-toggle-btn {
+    background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px;
+    width: 38px; height: 38px; cursor: pointer; font-size: 16px; flex-shrink: 0;
+    display:flex; align-items:center; justify-content:center; transition: background 0.15s;
+}
+.sidebar-toggle-btn:hover { background: #f1f2f6; }
+
+header { text-align: center; margin-bottom: 0; flex: 1; }
+header h1 { margin: 0 0 4px 0; color: var(--spotify-green); font-size: 1.9rem; }
+header p { color: var(--text-muted); margin: 0; font-size: 13px; }
+
+/* Search Section */
+.search-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+.search-bar-container { display: flex; gap: 12px; }
+.search-input {
+    flex: 1; padding: 12px 16px; border: 2px solid var(--border-color);
+    border-radius: 8px; font-size: 15px; outline: none; transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--spotify-green); }
+.search-btn {
+    background: var(--spotify-green); color: white; border: none;
+    padding: 0 24px; border-radius: 8px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.2s;
+}
+.search-btn:hover { opacity: 0.9; }
+.search-hint { font-size: 12px; color: var(--text-muted); margin: 10px 0 0; }
+.search-hint b { color: var(--spotify-green); }
+
+@media (max-width: 880px) {
+  .sidebar { position: fixed; left:0; z-index: 500; box-shadow: 0 0 30px rgba(0,0,0,0.15); }
+  .sidebar.collapsed { margin-left: -290px; }
+  .sidebar:not(.collapsed) { margin-left: 0; }
+}
+
+/* Empty state */
+.empty-state {
+    background: var(--card-bg); border: 1px dashed var(--border-color);
+    border-radius: 16px; padding: 60px 24px; text-align: center;
+    color: var(--text-muted);
+}
+.empty-state .icon { font-size: 44px; margin-bottom: 12px; }
+.empty-state h3 { color: var(--text-main); margin: 0 0 8px 0; }
+.empty-state p { font-size: 14px; max-width: 460px; margin: 0 auto; }
+
+/* Chart card */
+.chart-card {
+    background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 16px; padding: 26px; box-shadow: 0 10px 20px rgba(0,0,0,0.03);
+    position: relative; display: none;
+}
+.chart-card.active { display: block; animation: fadeIn 0.35s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(6px);} to {opacity:1; transform:translateY(0);} }
+.chart-card h2 {
+    margin-top: 0; margin-bottom: 6px; font-size: 1.25rem;
+    border-left: 4px solid var(--spotify-green); padding-left: 12px;
+}
+.chart-card .chart-desc { color: var(--text-muted); font-size: 13.5px; margin: 0 0 16px 12px; }
+
+.status-badge {
+    display: inline-block; margin-bottom: 14px; padding: 5px 13px;
+    background: #e8f5e9; color: #2e7d32; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+}
+.status-badge.clear-x { cursor: pointer; margin-left: 8px; font-weight: 800; }
+
+.chart-controls { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 14px; }
+.chart-controls select {
+    border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px;
+    font-size: 13px; cursor: pointer; background: #fafbfc;
+}
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.legend-dot { width: 11px; height: 11px; border-radius: 50%; }
+
+.insight-box {
+    margin-top: 16px; background: #f0fbf3; border: 1px dashed var(--spotify-green);
+    border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #166534;
+}
+
+/* D3 chart customizations */
+.axis text { fill: var(--text-muted); font-size: 11px; }
+.axis path, .axis line { stroke: var(--border-color); }
+.grid line { stroke: var(--border-color); stroke-opacity: 0.6; stroke-dasharray: 3,3; }
+.grid path { stroke-width: 0; }
+.bar { cursor: pointer; transition: opacity 0.2s; }
+.bar:hover { opacity: 0.85; }
+.dot { cursor: pointer; transition: opacity 0.15s; }
+
+.tooltip {
+    position: fixed; background: rgba(45, 52, 54, 0.96); color: #fff;
+    padding: 10px 14px; border-radius: 8px; pointer-events: none; opacity: 0;
+    font-size: 12.5px; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    line-height: 1.6; max-width: 230px; transition: opacity 0.15s;
+}
+.tooltip strong { color: var(--spotify-green); }
+
+#loading {
+    position: fixed; inset: 0; background: var(--bg-color);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 9999; gap: 16px;
+}
+.spinner {
+    width: 46px; height: 46px; border: 4px solid var(--border-color);
+    border-top-color: var(--spotify-green); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { color: var(--text-muted); font-size: 14px; }
+#loading .err { color: var(--pastel-coral); font-size: 13px; max-width: 480px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p id="loading-text">Loading Spotify_Cleaned.csv ...</p>
+</div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2>📈 Chart Library</h2>
+    <p>Click a chart type to see example questions</p>
+  </div>
+  <div id="sidebarList"></div>
+</nav>
+
+<div class="main-content">
+<div class="container">
+  <div class="top-bar">
+    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Toggle chart library">☰</button>
+    <header>
+      <h1>🎵 Spotify Audio Insights Dashboard</h1>
+     
+    </header>
+  </div>
+
+  <div class="search-section">
+    <div class="search-bar-container">
+      <input type="text" id="query-input" class="search-input" placeholder="Type your question... ">
+      <button id="search-submit" class="search-btn">Visualize</button>
+    </div>
+    
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    <div class="icon">📊</div>
+    <h3>Ask a question above to get started</h3>
+    <p>Type a question in your own words, or pick one from the Chart Library sidebar  the matching chart will appear here. Only the relevant chart is shown to keep things clean.</p>
+  </div>
+
+  <!-- ===== CHART CARDS (one shown at a time) ===== -->
+
+  <div class="chart-card" id="card-genreBar">
+    <h2>Genre Comparison — Bar Chart</h2>
+    <p class="chart-desc">Average popularity by genre. Click a bar to filter it further.</p>
+    <span class="status-badge" id="badge-genreBar">Top Genres by Popularity</span>
+    <div id="chart-genreBar"></div>
+    <div class="insight-box" id="insight-genreBar"></div>
+  </div>
+
+  <div class="chart-card" id="card-artistBar">
+    <h2>Top Artists — Bar Chart</h2>
+    <p class="chart-desc">Artists ranked by average track popularity (min. 3 tracks in dataset).</p>
+    <span class="status-badge" id="badge-artistBar">Most Popular Artists</span>
+    <div id="chart-artistBar"></div>
+    <div class="insight-box" id="insight-artistBar"></div>
+  </div>
+
+  <div class="chart-card" id="card-scatter">
+    <h2>Relationships  Scatter Plot</h2>
+    <p class="chart-desc" id="desc-scatter">Energy vs Loudness, colored by popularity.</p>
+    <span class="status-badge" id="badge-scatter">Track-Level Relationship</span>
+    <div id="chart-scatter"></div>
+  </div>
+
+  <div class="chart-card" id="card-kde">
+    <h2>Distribution — Histogram / KDE</h2>
+    <p class="chart-desc" id="desc-kde">Smoothed density of Tempo (BPM) across all tracks.</p>
+    <span class="status-badge" id="badge-kde">Feature Distribution</span>
+    <div id="chart-kde"></div>
+    <div class="insight-box" id="insight-kde"></div>
+  </div>
+
+  <div class="chart-card" id="card-box">
+    <h2>Spread — Box Plot</h2>
+    <p class="chart-desc" id="desc-box">Spread of Danceability across top genres.</p>
+    <span class="status-badge" id="badge-box">Spread &amp; Outliers</span>
+    <div id="chart-box"></div>
+    <div class="insight-box" id="insight-box"></div>
+  </div>
+
+  <div class="chart-card" id="card-heatmap">
+    <h2>Correlation — Heatmap</h2>
+    <p class="chart-desc">Correlation between all numeric audio features.</p>
+    <span class="status-badge" id="badge-heatmap">Feature Correlation Matrix</span>
+    <div id="chart-heatmap"></div>
+    <div class="insight-box" id="insight-heatmap"></div>
+  </div>
+
+  <div class="chart-card" id="card-bubble">
+    <h2>Mood Landscape — Bubble Chart</h2>
+    <p class="chart-desc">Danceability vs Valence, bubble size = Popularity, color = Genre.</p>
+    <span class="status-badge" id="badge-bubble">3-Variable Mood Map</span>
+    <div id="chart-bubble"></div>
+    <div class="legend" id="legend-bubble"></div>
+  </div>
+
+  <div class="chart-card" id="card-pie">
+    <h2>Proportion — Donut Chart</h2>
+    <p class="chart-desc" id="desc-pie">Explicit vs Non-Explicit tracks share.</p>
+    <span class="status-badge" id="badge-pie">Category Proportion</span>
+    <div id="chart-pie"></div>
+    <div class="insight-box" id="insight-pie"></div>
+  </div>
+
+  <div class="chart-card" id="card-groupedbar">
+    <h2>Explicit vs Popularity — Grouped Bar</h2>
+    <p class="chart-desc">Average popularity for explicit vs clean tracks, by top genres.</p>
+    <span class="status-badge" id="badge-groupedbar">Sub-group Comparison</span>
+    <div id="chart-groupedbar"></div>
+    <div class="legend" id="legend-groupedbar"></div>
+    <div class="insight-box" id="insight-groupedbar"></div>
+  </div>
+
+  <div class="chart-card" id="card-radar">
+    <h2>Genre Fingerprint — Radar Chart</h2>
+    <p class="chart-desc">Average audio-feature profile, comparing up to 4 genres.</p>
+    <span class="status-badge" id="badge-radar">Multi-Genre Audio Profile</span>
+    <div class="chart-controls" id="controls-radar"></div>
+    <div id="chart-radar"></div>
+    <div class="legend" id="legend-radar"></div>
+  </div>
+
+</div>
+</div>
+
+<div class="tooltip" id="chart-tooltip"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const PALETTE = ['#1db954','#ff7675','#00cec9','#a29bfe','#ffeaa7','#fd79a8','#fab1a0','#74b9ff',
+  '#55efc4','#e17055','#81ecec','#fdcb6e','#6c5ce7','#00b894','#e84393'];
+
+const NUMERIC_COLS = ["popularity","duration_ms","danceability","energy","key",
+  "loudness","mode","speechiness","acousticness","instrumentalness","liveness",
+  "valence","tempo","time_signature","duration_sec"];
+
+const FEATURE_LIST = ["popularity","danceability","energy","loudness","speechiness",
+  "acousticness","instrumentalness","liveness","valence","tempo","duration_sec"];
+
+const FEATURE_KEYWORDS = {
+  "popularity":"popularity", "danceability":"danceability", "dance":"danceability",
+  "energy":"energy", "loudness":"loudness", "loud":"loudness",
+  "speechiness":"speechiness", "speech":"speechiness",
+  "acousticness":"acousticness", "acoustic":"acousticness",
+  "instrumentalness":"instrumentalness", "instrumental":"instrumentalness",
+  "liveness":"liveness", "live":"liveness",
+  "valence":"valence", "mood":"valence", "happiness":"valence",
+  "tempo":"tempo", "bpm":"tempo",
+  "duration":"duration_sec", "length":"duration_sec",
+};
+
+// Preset bank, grouped by chart type, each with a target chart id
+const PRESET_BANK = [
+  { chart:"genreBar", icon:"📊", title:"Genre Comparison", examples:[
+      "compare genres by popularity", "which genres dominate Spotify", "top genres" ] },
+  { chart:"artistBar", icon:"🎤", title:"Top Artists", examples:[
+      "most popular artist", "top artists", "which artist is most popular" ] },
+  { chart:"scatter", icon:"⚡", title:"Relationships", examples:[
+      "relationship between energy and loudness", "danceability vs valence", "energy vs popularity" ] },
+  { chart:"kde", icon:"🌊", title:"Distribution", examples:[
+      "distribution of tempo", "popularity distribution", "spread of valence values" ] },
+  { chart:"box", icon:"📦", title:"Spread / Outliers", examples:[
+      "spread of danceability", "outliers in loudness", "box plot of tempo by genre" ] },
+  { chart:"heatmap", icon:"🔥", title:"Correlation", examples:[
+      "correlation between all features", "feature correlation heatmap", "what correlates with popularity" ] },
+  { chart:"bubble", icon:"🫧", title:"Mood Landscape", examples:[
+      "mood landscape", "danceability valence popularity bubble", "happy danceable tracks" ] },
+  { chart:"pie", icon:"🍩", title:"Proportions", examples:[
+      "explicit vs non-explicit tracks", "major vs minor key proportion", "percentage of explicit songs" ] },
+  { chart:"groupedbar", icon:"📶", title:"Sub-group Comparison", examples:[
+      "explicit tracks popularity by genre", "are explicit tracks more popular", "explicit vs clean by genre" ] },
+  { chart:"radar", icon:"🕸️", title:"Genre Fingerprint", examples:[
+      "genre fingerprint", "compare pop vs rock audio features", "genre audio profile comparison" ] },
+];
+
+let allData = [];
+let genreColor;
+const tooltip = d3.select("#chart-tooltip");
+
+/* ============================================================
+   LOAD DATA
+   ============================================================ */
+d3.csv("Spotify_Cleaned.csv").then(raw => {
+  allData = raw.map(d => {
+    const row = {...d};
+    NUMERIC_COLS.forEach(c => { if (c in row) row[c] = +row[c]; });
+    row.explicit = (d.explicit === "True" || d.explicit === "true" || d.explicit === "TRUE");
+    if (!row.duration_sec && row.duration_ms) row.duration_sec = row.duration_ms/1000;
+    return row;
+  });
+
+  const genres = Array.from(new Set(allData.map(d=>d.track_genre))).sort();
+  genreColor = d3.scaleOrdinal().domain(genres).range(PALETTE);
+
+  buildSidebar();
+  document.getElementById("loading").style.display = "none";
+}).catch(err => {
+  document.getElementById("loading-text").textContent = "Couldn't load Spotify_Cleaned.csv";
+  const e = document.createElement("p");
+  e.className = "err";
+  e.textContent = "Make sure 'Spotify_Cleaned.csv' is placed in the SAME folder as this HTML file, then open via a local server (not file://). Error: " + err;
+  document.getElementById("loading").appendChild(e);
+  console.error(err);
+});
+
+/* ============================================================
+   SIDEBAR — accordion chart library
+   ============================================================ */
+function buildSidebar() {
+  const list = document.getElementById("sidebarList");
+  PRESET_BANK.forEach(group => {
+    const item = document.createElement("div");
+    item.className = "sidebar-item";
+    item.id = "sidebar-item-" + group.chart;
+    item.innerHTML = `
+      <div class="sidebar-item-head">
+        <span class="ic">${group.icon}</span>
+        <span class="lbl">${group.title}</span>
+        <span class="chev">▸</span>
+      </div>
+      <div class="sidebar-examples">
+        ${group.examples.map(ex => `<div class="sidebar-example" data-q="${ex}">${ex}</div>`).join("")}
+      </div>`;
+    list.appendChild(item);
+
+    item.querySelector(".sidebar-item-head").addEventListener("click", () => {
+      const wasExpanded = item.classList.contains("expanded");
+      document.querySelectorAll(".sidebar-item").forEach(i => i.classList.remove("expanded"));
+      if (!wasExpanded) item.classList.add("expanded");
+    });
+
+    item.querySelectorAll(".sidebar-example").forEach(ex => {
+      ex.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("query-input").value = ex.dataset.q;
+        handleAsk();
+      });
+    });
+  });
+}
+
+document.getElementById("sidebarToggle").addEventListener("click", () => {
+  document.getElementById("sidebar").classList.toggle("collapsed");
+});
+
+function markActiveSidebarItem(chartType) {
+  document.querySelectorAll(".sidebar-item").forEach(i => i.classList.remove("active-item"));
+  const el = document.getElementById("sidebar-item-" + chartType);
+  if (el) el.classList.add("active-item");
+}
+
+/* ============================================================
+   ASK / ROUTING — "bar strategy": only ONE chart visible at a time
+   ============================================================ */
+const INTENT_RULES = [
+  { type:"scatter",    keywords:["relationship","vs","versus","against","correlat between","compare two"] },
+  { type:"artistBar",  keywords:["artist","singer"] },
+  { type:"genreBar",   keywords:["compare genre","comparison","which genre","top genre","dominate","most popular genre","rank genre"] },
+  { type:"kde",        keywords:["distribution","spread out","density","histogram","shape of"] },
+  { type:"box",        keywords:["spread","outlier","box plot","quartile","range of","variability"] },
+  { type:"heatmap",    keywords:["correlation","heatmap","relate to each other","all features","matrix","predict popularity"] },
+  { type:"bubble",     keywords:["mood","bubble","landscape","happy","danceable"] },
+  { type:"pie",        keywords:["proportion","percentage","share","explicit vs non","major vs minor","pie","donut"] },
+  { type:"groupedbar", keywords:["explicit","popular","by genre"] },
+  { type:"radar",      keywords:["fingerprint","radar","spider","profile","audio profile"] },
+];
+
+function handleAsk() {
+  const raw = document.getElementById("query-input").value.trim();
+  if (!raw) return;
+  const val = raw.toLowerCase();
+
+  let bestType = null, bestScore = 0;
+  INTENT_RULES.forEach(rule => {
+    let score = 0;
+    rule.keywords.forEach(k => { if (val.includes(k)) score += 2; });
+    if (score > bestScore) { bestScore = score; bestType = rule.type; }
+  });
+
+  const mentionedFeats = [];
+  Object.keys(FEATURE_KEYWORDS).forEach(k => {
+    if (val.includes(k) && !mentionedFeats.includes(FEATURE_KEYWORDS[k])) {
+      mentionedFeats.push(FEATURE_KEYWORDS[k]);
+    }
+  });
+
+  if (!bestType) {
+    if (mentionedFeats.length >= 2) bestType = "scatter";
+    else if (mentionedFeats.length === 1) bestType = "kde";
+    else bestType = "genreBar";
+  }
+
+  showOnlyChart(bestType);
+
+  if (bestType === "scatter") {
+    const fx = mentionedFeats[0] || "energy";
+    const fy = mentionedFeats[1] || (fx === "energy" ? "loudness" : "popularity");
+    renderScatter(allData, fx, fy);
+  } else if (bestType === "kde") {
+    renderKDE(allData, mentionedFeats[0] || "tempo");
+  } else if (bestType === "box") {
+    renderBox(allData, mentionedFeats[0] || "danceability");
+  } else if (bestType === "heatmap") {
+    renderHeatmap(allData);
+  } else if (bestType === "bubble") {
+    renderBubble(allData);
+  } else if (bestType === "pie") {
+    renderPie(allData);
+  } else if (bestType === "groupedbar") {
+    renderGroupedBar(allData);
+  } else if (bestType === "radar") {
+    renderRadar(allData);
+  } else if (bestType === "artistBar") {
+    renderArtistBar(allData);
+  } else {
+    renderGenreBar(allData);
+  }
+}
+
+function showOnlyChart(type) {
+  document.getElementById("emptyState").style.display = "none";
+  document.querySelectorAll(".chart-card").forEach(c => c.classList.remove("active"));
+  const card = document.getElementById("card-"+type);
+  if (card) {
+    card.classList.add("active");
+    setTimeout(() => card.scrollIntoView({behavior:"smooth", block:"start"}), 50);
+  }
+  markActiveSidebarItem(type);
+}
+
+document.getElementById("search-submit").addEventListener("click", handleAsk);
+document.getElementById("query-input").addEventListener("keypress", e => { if (e.key === "Enter") handleAsk(); });
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function showTip(event, html) {
+  tooltip.style("opacity",1).html(html);
+  moveTip(event);
+}
+function moveTip(event) {
+  tooltip.style("left",(event.clientX+14)+"px").style("top",(event.clientY-10)+"px");
+}
+function hideTip() { tooltip.style("opacity",0); }
+function pearsonR(a,b) {
+  const ma=d3.mean(a), mb=d3.mean(b);
+  const num=d3.sum(a.map((v,i)=>(v-ma)*(b[i]-mb)));
+  const den=Math.sqrt(d3.sum(a.map(v=>(v-ma)**2))*d3.sum(b.map(v=>(v-mb)**2)));
+  return den===0?0:num/den;
+}
+function niceLabel(f) { return f.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()); }
+function chartWidth(id) { return Math.max(document.getElementById(id).clientWidth || 760, 400); }
+
+/* ============================================================
+   1) GENRE BAR CHART
+   ============================================================ */
+function renderGenreBar(data) {
+  const host = document.getElementById("chart-genreBar");
+  host.innerHTML = "";
+  const byGenre = d3.rollups(data, v=>({pop:d3.mean(v,d=>d.popularity), count:v.length}), d=>d.track_genre)
+    .map(([genre,vals])=>({genre,...vals})).sort((a,b)=>b.pop-a.pop).slice(0,15);
+
+  const W = chartWidth("chart-genreBar"), H = 34*byGenre.length+40;
+  const margin = {top:10,right:60,bottom:10,left:120};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+
+  const x = d3.scaleLinear().domain([0,d3.max(byGenre,d=>d.pop)*1.1]).range([0,w]);
+  const y = d3.scaleBand().domain(byGenre.map(d=>d.genre)).range([0,h]).padding(0.28);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisBottom(x).ticks(5).tickSize(h).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  const bars = g.selectAll(".bar").data(byGenre).join("rect").attr("class","bar")
+    .attr("x",0).attr("y",d=>y(d.genre)).attr("height",y.bandwidth()).attr("width",0).attr("rx",5)
+    .attr("fill",(d,i)=>PALETTE[i%PALETTE.length])
+    .on("mouseover",(e,d)=>showTip(e,`<strong>${d.genre}</strong><br/>Avg Popularity: <strong>${d.pop.toFixed(1)}</strong><br/>Tracks: ${d.count.toLocaleString()}`))
+    .on("mousemove",moveTip).on("mouseleave",hideTip);
+  bars.transition().duration(600).attr("width",d=>x(d.pop));
+
+  g.selectAll(".cnt").data(byGenre).join("text").attr("x",d=>x(d.pop)+6).attr("y",d=>y(d.genre)+y.bandwidth()/2+4)
+    .attr("font-size",10.5).attr("fill","var(--text-muted)").text(d=>d.count.toLocaleString());
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).tickSize(0)).call(s=>s.select(".domain").remove());
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(5)).call(s=>s.select(".domain").remove());
+
+  document.getElementById("insight-genreBar").innerHTML = `💡 <strong>${byGenre[0].genre}</strong> leads with avg popularity ${byGenre[0].pop.toFixed(1)} — top genres can be 2-3x more popular than niche ones.`;
+}
+
+/* ============================================================
+   2) TOP ARTISTS BAR CHART
+   ============================================================ */
+function renderArtistBar(data) {
+  const host = document.getElementById("chart-artistBar");
+  host.innerHTML = "";
+  const byArtist = d3.rollups(data, v=>({pop:d3.mean(v,d=>d.popularity), count:v.length}), d=>d.artists)
+    .map(([artist,vals])=>({artist,...vals}))
+    .filter(d=>d.count>=3)
+    .sort((a,b)=>b.pop-a.pop).slice(0,15);
+
+  const W = chartWidth("chart-artistBar"), H = 34*byArtist.length+40;
+  const margin = {top:10,right:60,bottom:10,left:150};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+
+  const x = d3.scaleLinear().domain([0,d3.max(byArtist,d=>d.pop)*1.1]).range([0,w]);
+  const y = d3.scaleBand().domain(byArtist.map(d=>d.artist)).range([0,h]).padding(0.28);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisBottom(x).ticks(5).tickSize(h).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  const bars = g.selectAll(".bar").data(byArtist).join("rect").attr("class","bar")
+    .attr("x",0).attr("y",d=>y(d.artist)).attr("height",y.bandwidth()).attr("width",0).attr("rx",5)
+    .attr("fill",(d,i)=>PALETTE[i%PALETTE.length])
+    .on("mouseover",(e,d)=>showTip(e,`<strong>${d.artist}</strong><br/>Avg Popularity: <strong>${d.pop.toFixed(1)}</strong><br/>Tracks in data: ${d.count}`))
+    .on("mousemove",moveTip).on("mouseleave",hideTip);
+  bars.transition().duration(600).attr("width",d=>x(d.pop));
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).tickSize(0)).call(s=>s.select(".domain").remove());
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(5)).call(s=>s.select(".domain").remove());
+
+  document.getElementById("insight-artistBar").innerHTML = byArtist.length ? `💡 <strong>${byArtist[0].artist}</strong> has the highest average popularity (${byArtist[0].pop.toFixed(1)}) among artists with 3+ tracks.` : "";
+}
+
+/* ============================================================
+   3) SCATTER PLOT
+   ============================================================ */
+function renderScatter(data, fx, fy) {
+  document.getElementById("desc-scatter").textContent = `${niceLabel(fx)} vs ${niceLabel(fy)}, colored by popularity.`;
+  const host = document.getElementById("chart-scatter");
+  host.innerHTML = "";
+  const sample = data.length>1800 ? d3.shuffle([...data]).slice(0,1800) : data;
+
+  const W = chartWidth("chart-scatter"), H=380;
+  const margin={top:16,right:20,bottom:46,left:54};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+
+  const x = d3.scaleLinear().domain(d3.extent(sample,d=>d[fx])).nice().range([0,w]);
+  const y = d3.scaleLinear().domain(d3.extent(sample,d=>d[fy])).nice().range([h,0]);
+  const colorScale = d3.scaleSequential(d3.interpolateRdYlGn).domain([0,100]);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  g.selectAll(".dot").data(sample).join("circle").attr("class","dot")
+    .attr("cx",d=>x(d[fx])).attr("cy",d=>y(d[fy])).attr("r",4)
+    .attr("fill",d=>colorScale(d.popularity)).attr("opacity",0.65).attr("stroke","white").attr("stroke-width",0.4)
+    .on("mouseover",function(e,d){ d3.select(this).attr("r",7).attr("opacity",1);
+      showTip(e,`<strong>${d.track_name}</strong><br/>${d.artists}<br/>${niceLabel(fx)}: ${(+d[fx]).toFixed(2)}<br/>${niceLabel(fy)}: ${(+d[fy]).toFixed(2)}<br/>Popularity: ${d.popularity}`);})
+    .on("mousemove",moveTip)
+    .on("mouseleave",function(){ d3.select(this).attr("r",4).attr("opacity",0.65); hideTip(); });
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(6));
+  g.append("text").attr("x",w/2).attr("y",h+38).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text(niceLabel(fx));
+  g.append("text").attr("transform","rotate(-90)").attr("x",-h/2).attr("y",-38).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text(niceLabel(fy));
+
+  const r = pearsonR(sample.map(d=>d[fx]), sample.map(d=>d[fy]));
+  document.getElementById("badge-scatter").textContent = `r = ${r.toFixed(3)} ${Math.abs(r)>0.5?"(strong)":Math.abs(r)>0.25?"(moderate)":"(weak)"}`;
+}
+
+/* ============================================================
+   4) KDE / HISTOGRAM
+   ============================================================ */
+function renderKDE(data, feat) {
+  document.getElementById("desc-kde").textContent = `Smoothed density curve of ${niceLabel(feat)} across all tracks.`;
+  const host = document.getElementById("chart-kde");
+  host.innerHTML = "";
+  const values = data.map(d=>d[feat]).filter(v=>!isNaN(v));
+
+  const W = chartWidth("chart-kde"), H=340;
+  const margin={top:16,right:20,bottom:44,left:48};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+  const x = d3.scaleLinear().domain(d3.extent(values)).nice().range([0,w]);
+
+  function kernelEpanechnikov(k){ return v=>Math.abs(v/=k)<=1?0.75*(1-v*v)/k:0; }
+  const bandwidth = (d3.max(values)-d3.min(values))/25 || 1;
+  const kernel = kernelEpanechnikov(bandwidth);
+  const density = x.ticks(60).map(xv=>[xv, d3.mean(values, v=>kernel(xv-v))]);
+  const y = d3.scaleLinear().domain([0, d3.max(density,d=>d[1])*1.1]).range([h,0]);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  const area = d3.area().curve(d3.curveBasis).x(d=>x(d[0])).y0(h).y1(d=>y(d[1]));
+  const line = d3.line().curve(d3.curveBasis).x(d=>x(d[0])).y(d=>y(d[1]));
+  g.append("path").datum(density).attr("d",area).attr("fill","#a29bfe").attr("fill-opacity",0.25);
+  g.append("path").datum(density).attr("d",line).attr("fill","none").attr("stroke","#6c5ce7").attr("stroke-width",2.5);
+
+  const meanV = d3.mean(values);
+  g.append("line").attr("x1",x(meanV)).attr("x2",x(meanV)).attr("y1",0).attr("y2",h).attr("stroke","#ff7675").attr("stroke-width",1.5).attr("stroke-dasharray","4,3");
+  g.append("text").attr("x",x(meanV)+4).attr("y",12).attr("font-size",10).attr("fill","#d63031").text(`mean ${meanV.toFixed(1)}`);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(5));
+  g.append("text").attr("x",w/2).attr("y",h+36).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text(niceLabel(feat));
+
+  document.getElementById("insight-kde").innerHTML = `💡 Mean ${niceLabel(feat)} is <strong>${meanV.toFixed(2)}</strong>, median is <strong>${d3.median(values).toFixed(2)}</strong>.`;
+}
+
+/* ============================================================
+   5) BOX PLOT
+   ============================================================ */
+function renderBox(data, feat) {
+  document.getElementById("desc-box").textContent = `Spread of ${niceLabel(feat)} across top genres — box = IQR, line = median.`;
+  const host = document.getElementById("chart-box");
+  host.innerHTML = "";
+  const groups = d3.rollups(data, v=>v.length, d=>d.track_genre).sort((a,b)=>b[1]-a[1]).slice(0,8).map(d=>d[0]);
+
+  const W = chartWidth("chart-box"), H=380;
+  const margin={top:16,right:20,bottom:64,left:54};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+  const x = d3.scaleBand().domain(groups).range([0,w]).padding(0.4);
+  const allVals = data.filter(d=>groups.includes(d.track_genre)).map(d=>d[feat]);
+  const y = d3.scaleLinear().domain([d3.min(allVals)*0.95, d3.max(allVals)*1.05]).range([h,0]);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisLeft(y).ticks(6).tickSize(-w).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  groups.forEach((genre,i)=>{
+    const vals = data.filter(d=>d.track_genre===genre).map(d=>d[feat]).sort(d3.ascending);
+    const q1=d3.quantile(vals,0.25), median=d3.quantile(vals,0.5), q3=d3.quantile(vals,0.75);
+    const iqr=q3-q1, lo=Math.max(d3.min(vals),q1-1.5*iqr), hi=Math.min(d3.max(vals),q3+1.5*iqr);
+    const center=x(genre)+x.bandwidth()/2, boxW=x.bandwidth(), color=PALETTE[i%PALETTE.length];
+
+    g.append("line").attr("x1",center).attr("x2",center).attr("y1",y(lo)).attr("y2",y(q1)).attr("stroke","#999");
+    g.append("line").attr("x1",center).attr("x2",center).attr("y1",y(q3)).attr("y2",y(hi)).attr("stroke","#999");
+    g.append("line").attr("x1",center-boxW*0.2).attr("x2",center+boxW*0.2).attr("y1",y(lo)).attr("y2",y(lo)).attr("stroke","#999");
+    g.append("line").attr("x1",center-boxW*0.2).attr("x2",center+boxW*0.2).attr("y1",y(hi)).attr("y2",y(hi)).attr("stroke","#999");
+    g.append("rect").attr("x",x(genre)).attr("width",boxW).attr("y",y(q3)).attr("height",Math.max(2,y(q1)-y(q3)))
+      .attr("fill",color).attr("fill-opacity",0.55).attr("stroke",color).attr("stroke-width",1.5).attr("rx",3)
+      .on("mouseover",e=>showTip(e,`<strong>${genre}</strong><br/>Median: ${median.toFixed(2)}<br/>Q1-Q3: ${q1.toFixed(2)}-${q3.toFixed(2)}<br/>Range: ${lo.toFixed(2)}-${hi.toFixed(2)}`))
+      .on("mousemove",moveTip).on("mouseleave",hideTip);
+    g.append("line").attr("x1",x(genre)).attr("x2",x(genre)+boxW).attr("y1",y(median)).attr("y2",y(median)).attr("stroke","#2d3436").attr("stroke-width",2.5);
+  });
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x)).selectAll("text").attr("transform","rotate(-25)").attr("text-anchor","end");
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(6));
+  g.append("text").attr("transform","rotate(-90)").attr("x",-h/2).attr("y",-38).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text(niceLabel(feat));
+
+  document.getElementById("insight-box").innerHTML = `💡 Taller boxes show more variability in ${niceLabel(feat)} within that genre.`;
+}
+
+/* ============================================================
+   6) HEATMAP
+   ============================================================ */
+function renderHeatmap(data) {
+  const host = document.getElementById("chart-heatmap");
+  host.innerHTML = "";
+  const cols = FEATURE_LIST;
+  const vectors = {}; cols.forEach(c=>vectors[c]=data.map(d=>+d[c]));
+  const matrix = cols.map(r=>cols.map(c=>({row:r,col:c,val:pearsonR(vectors[r],vectors[c])})));
+
+  const W = chartWidth("chart-heatmap");
+  const size = Math.min(Math.floor((W-130)/cols.length),56);
+  const H = size*cols.length+90;
+  const margin={top:30,right:20,bottom:40,left:120};
+  const colorScale = d3.scaleDiverging([-1,0,1]).interpolator(d3.interpolateRgb("#ff7675","#FFFFFF","#1db954"));
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+
+  g.selectAll(".cell").data(matrix.flat()).join("rect")
+    .attr("x",d=>cols.indexOf(d.col)*size).attr("y",d=>cols.indexOf(d.row)*size)
+    .attr("width",size-2).attr("height",size-2).attr("rx",3)
+    .attr("fill",d=>colorScale(d.val)).attr("stroke","#eee")
+    .on("mouseover",function(e,d){ d3.select(this).attr("stroke","#333").attr("stroke-width",2); showTip(e,`<strong>${niceLabel(d.row)} × ${niceLabel(d.col)}</strong><br/>r = <strong>${d.val.toFixed(3)}</strong>`);})
+    .on("mousemove",moveTip)
+    .on("mouseleave",function(){ d3.select(this).attr("stroke","#eee").attr("stroke-width",1); hideTip(); });
+
+  g.selectAll(".cell-label").data(matrix.flat()).join("text")
+    .attr("x",d=>cols.indexOf(d.col)*size+size/2-1).attr("y",d=>cols.indexOf(d.row)*size+size/2+4)
+    .attr("text-anchor","middle").attr("font-size",Math.max(8,size/6))
+    .attr("fill",d=>Math.abs(d.val)>0.55?"#fff":"#444").attr("pointer-events","none").text(d=>d.val.toFixed(2));
+
+  g.selectAll(".row-label").data(cols).join("text").attr("x",-6).attr("y",(d,i)=>i*size+size/2+4)
+    .attr("text-anchor","end").attr("font-size",10.5).attr("fill","var(--text-muted)").text(d=>niceLabel(d));
+  g.selectAll(".col-label").data(cols).join("text").attr("x",(d,i)=>i*size+size/2).attr("y",-8)
+    .attr("text-anchor","middle").attr("font-size",10.5).attr("fill","var(--text-muted)")
+    .attr("transform",(d,i)=>`rotate(-35, ${i*size+size/2}, -8)`).text(d=>niceLabel(d));
+
+  const corrPairs=[];
+  cols.forEach((r,i)=>cols.forEach((c,j)=>{ if(i<j) corrPairs.push({r,c,val:matrix[i][j].val}); }));
+  corrPairs.sort((a,b)=>Math.abs(b.val)-Math.abs(a.val));
+  const top = corrPairs[0];
+  document.getElementById("insight-heatmap").innerHTML = top ? `💡 Strongest relationship: <strong>${niceLabel(top.r)}</strong> & <strong>${niceLabel(top.c)}</strong> (r=${top.val.toFixed(2)}).` : "";
+}
+
+/* ============================================================
+   7) BUBBLE CHART
+   ============================================================ */
+function renderBubble(data) {
+  const host = document.getElementById("chart-bubble");
+  const legendBox = document.getElementById("legend-bubble");
+  host.innerHTML = ""; legendBox.innerHTML = "";
+
+  const top10 = d3.rollups(data, v=>v.length, d=>d.track_genre).sort((a,b)=>b[1]-a[1]).slice(0,10).map(d=>d[0]);
+  const sample = d3.shuffle(data.filter(d=>top10.includes(d.track_genre))).slice(0,1500);
+
+  const W = chartWidth("chart-bubble"), H=420;
+  const margin={top:24,right:20,bottom:46,left:54};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+  const x = d3.scaleLinear().domain([0,1]).range([0,w]);
+  const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+  const r = d3.scaleSqrt().domain([0,100]).range([2,12]);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  g.append("line").attr("x1",x(0.5)).attr("x2",x(0.5)).attr("y1",0).attr("y2",h).attr("stroke","#ccc").attr("stroke-dasharray","4,4");
+  g.append("line").attr("x1",0).attr("x2",w).attr("y1",y(0.5)).attr("y2",y(0.5)).attr("stroke","#ccc").attr("stroke-dasharray","4,4");
+
+  g.selectAll(".bub").data(sample).join("circle").attr("class","dot")
+    .attr("cx",d=>x(d.danceability)).attr("cy",d=>y(d.valence)).attr("r",0)
+    .attr("fill",d=>genreColor(d.track_genre)).attr("opacity",0.6).attr("stroke","white").attr("stroke-width",0.5)
+    .on("mouseover",function(e,d){ d3.select(this).attr("opacity",0.95);
+      showTip(e,`<strong>${d.track_name}</strong><br/>${d.artists}<br/>Genre: ${d.track_genre}<br/>Dance: ${d.danceability.toFixed(2)} | Valence: ${d.valence.toFixed(2)}<br/>Popularity: ${d.popularity}`);})
+    .on("mousemove",moveTip)
+    .on("mouseleave",function(){ d3.select(this).attr("opacity",0.6); hideTip(); })
+    .transition().duration(600).attr("r",d=>r(d.popularity));
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(5));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(5));
+  g.append("text").attr("x",w/2).attr("y",h+36).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text("Danceability");
+  g.append("text").attr("transform","rotate(-90)").attr("x",-h/2).attr("y",-38).attr("text-anchor","middle").attr("font-size",11).attr("fill","var(--text-muted)").text("Valence");
+
+  top10.forEach(genre=>{
+    legendBox.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${genreColor(genre)}"></div>${genre}</div>`;
+  });
+}
+
+/* ============================================================
+   8) PIE / DONUT CHART
+   ============================================================ */
+function renderPie(data) {
+  const host = document.getElementById("chart-pie");
+  host.innerHTML = "";
+
+  const expCounts = [
+    { label:"Non-Explicit", value: data.filter(d=>!d.explicit).length, color:"#1db954" },
+    { label:"Explicit", value: data.filter(d=>d.explicit).length, color:"#ff7675" }
+  ];
+  const modeCounts = [
+    { label:"Major Key", value: data.filter(d=>d.mode===1).length, color:"#74b9ff" },
+    { label:"Minor Key", value: data.filter(d=>d.mode===0).length, color:"#a29bfe" }
+  ];
+
+  const W = Math.min(chartWidth("chart-pie")/2-20, 320), H=300, radius=Math.min(W,H)/2-30;
+
+  function drawDonut(parentSel, dataset, title) {
+    const svg = parentSel.append("svg").attr("width",W).attr("height",H);
+    const g = svg.append("g").attr("transform",`translate(${W/2},${H/2})`);
+    const pie = d3.pie().value(d=>d.value).sort(null);
+    const arc = d3.arc().innerRadius(radius*0.55).outerRadius(radius);
+    const total = d3.sum(dataset, d=>d.value);
+
+    g.selectAll("path").data(pie(dataset)).join("path")
+      .attr("d",arc).attr("fill",d=>d.data.color).attr("stroke","white").attr("stroke-width",2)
+      .on("mouseover",function(e,d){ d3.select(this).attr("opacity",0.85);
+        showTip(e,`<strong>${d.data.label}</strong><br/>${d.data.value.toLocaleString()} tracks (${(d.data.value/total*100).toFixed(1)}%)`);})
+      .on("mousemove",moveTip)
+      .on("mouseleave",function(){ d3.select(this).attr("opacity",1); hideTip(); });
+
+    g.append("text").attr("text-anchor","middle").attr("dy",-2).attr("font-size",13).attr("font-weight",700).text(title);
+    g.append("text").attr("text-anchor","middle").attr("dy",16).attr("font-size",11).attr("fill","var(--text-muted)").text(`${total.toLocaleString()} tracks`);
+
+    const legendG = svg.append("g").attr("transform",`translate(${W/2-50},${H-22})`);
+    dataset.forEach((d,i)=>{
+      legendG.append("rect").attr("x",i*100).attr("y",0).attr("width",10).attr("height",10).attr("rx",2).attr("fill",d.color);
+      legendG.append("text").attr("x",i*100+15).attr("y",9).attr("font-size",11).attr("fill","var(--text-muted)").text(`${d.label} (${(d.value/total*100).toFixed(0)}%)`);
+    });
+  }
+
+  const wrap = d3.select(host).append("div").style("display","flex").style("flex-wrap","wrap").style("gap","20px").style("justify-content","center");
+  drawDonut(wrap.append("div"), expCounts, "Explicit Content");
+  drawDonut(wrap.append("div"), modeCounts, "Key Mode");
+
+  const expPct = (expCounts[1].value/(expCounts[0].value+expCounts[1].value)*100).toFixed(1);
+  document.getElementById("insight-pie").innerHTML = `💡 Only <strong>${expPct}%</strong> of tracks are marked explicit — the dataset is overwhelmingly clean content.`;
+}
+
+/* ============================================================
+   9) GROUPED BAR — explicit vs clean popularity by genre
+   ============================================================ */
+function renderGroupedBar(data) {
+  const host = document.getElementById("chart-groupedbar");
+  const legendBox = document.getElementById("legend-groupedbar");
+  host.innerHTML = "";
+  legendBox.innerHTML = `<div class="legend-item"><div class="legend-dot" style="background:#ff7675"></div>Explicit</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1db954"></div>Non-Explicit</div>`;
+
+  const top10 = d3.rollups(data, v=>v.length, d=>d.track_genre).sort((a,b)=>b[1]-a[1]).slice(0,10).map(d=>d[0]);
+  const groupData = top10.map(genre=>{
+    const rows = data.filter(d=>d.track_genre===genre);
+    return { genre,
+      explicit: d3.mean(rows.filter(d=>d.explicit),d=>d.popularity) || 0,
+      clean: d3.mean(rows.filter(d=>!d.explicit),d=>d.popularity) || 0 };
+  });
+
+  const W = chartWidth("chart-groupedbar"), H=400;
+  const margin={top:16,right:20,bottom:70,left:50};
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
+  const x0 = d3.scaleBand().domain(top10).range([0,w]).padding(0.25);
+  const x1 = d3.scaleBand().domain(["explicit","clean"]).range([0,x0.bandwidth()]).padding(0.1);
+  const y = d3.scaleLinear().domain([0, d3.max(groupData,d=>Math.max(d.explicit,d.clean))*1.15]).range([h,0]);
+
+  const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+  g.append("g").attr("class","grid").call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat("")).call(s=>s.select(".domain").remove());
+
+  const groups = g.selectAll(".grp").data(groupData).join("g").attr("transform",d=>`translate(${x0(d.genre)},0)`);
+  ["explicit","clean"].forEach(key=>{
+    groups.append("rect").attr("class","bar").attr("x",x1(key)).attr("width",x1.bandwidth())
+      .attr("y",h).attr("height",0).attr("rx",3).attr("fill",key==="explicit"?"#ff7675":"#1db954")
+      .on("mouseover",(e,d)=>showTip(e,`<strong>${d.genre}</strong><br/>${key==="explicit"?"Explicit":"Non-Explicit"}: <strong>${d[key].toFixed(1)}</strong>`))
+      .on("mousemove",moveTip).on("mouseleave",hideTip)
+      .transition().duration(600).attr("y",d=>y(d[key])).attr("height",d=>h-y(d[key]));
+  });
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x0)).selectAll("text").attr("transform","rotate(-30)").attr("text-anchor","end");
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(5));
+
+  const expAvg = d3.mean(data.filter(d=>d.explicit),d=>d.popularity);
+  const cleanAvg = d3.mean(data.filter(d=>!d.explicit),d=>d.popularity);
+  document.getElementById("insight-groupedbar").innerHTML = `💡 Overall, explicit tracks average <strong>${expAvg.toFixed(1)}</strong> popularity vs <strong>${cleanAvg.toFixed(1)}</strong> for clean tracks.`;
+}
+
+/* ============================================================
+   10) RADAR CHART
+   ============================================================ */
+function renderRadar(data) {
+  const top10 = d3.rollups(data, v=>v.length, d=>d.track_genre).sort((a,b)=>b[1]-a[1]).slice(0,10).map(d=>d[0]);
+  const controls = document.getElementById("controls-radar");
+  controls.innerHTML = `<span style="font-size:12.5px;color:var(--text-muted);align-self:center;">Compare:</span>` +
+    top10.slice(0,6).map((g,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;">
+      <input type="checkbox" class="radar-genre" value="${g}" ${i<3?"checked":""}/> ${g}</label>`).join("");
+  controls.querySelectorAll(".radar-genre").forEach(cb=>cb.onchange=()=>drawRadar(data));
+  drawRadar(data);
+
+  function drawRadar(data) {
+    const host = document.getElementById("chart-radar");
+    const legendBox = document.getElementById("legend-radar");
+    host.innerHTML = ""; legendBox.innerHTML = "";
+
+    let selected = Array.from(document.querySelectorAll(".radar-genre:checked")).map(cb=>cb.value);
+    if (selected.length===0) selected=[top10[0]];
+    selected = selected.slice(0,4);
+
+    const feats = ["danceability","energy","valence","acousticness","speechiness","liveness"];
+    const radarData = selected.map(genre=>{
+      const rows = data.filter(d=>d.track_genre===genre);
+      return { genre, vals: feats.map(f=>d3.mean(rows,d=>d[f])) };
+    });
+
+    const W = Math.min(chartWidth("chart-radar"),560), H=460;
+    const radius = Math.min(W,H)/2-70;
+    const cx=W/2, cy=H/2;
+    const angleStep=(Math.PI*2)/feats.length;
+    const rScale = d3.scaleLinear().domain([0,1]).range([0,radius]);
+
+    const svg = d3.select(host).append("svg").attr("width",W).attr("height",H);
+    const g = svg.append("g").attr("transform",`translate(${cx},${cy})`);
+
+    [0.2,0.4,0.6,0.8,1.0].forEach(t=>g.append("circle").attr("r",rScale(t)).attr("fill","none").attr("stroke","var(--border-color)"));
+    feats.forEach((f,i)=>{
+      const angle=angleStep*i-Math.PI/2;
+      g.append("line").attr("x1",0).attr("y1",0).attr("x2",Math.cos(angle)*radius).attr("y2",Math.sin(angle)*radius).attr("stroke","var(--border-color)");
+      g.append("text").attr("x",Math.cos(angle)*(radius+18)).attr("y",Math.sin(angle)*(radius+18)).attr("text-anchor","middle").attr("font-size",11.5).attr("fill","var(--text-muted)").text(f);
+    });
+
+    const colors = ["#1db954","#ff7675","#6c5ce7","#fdcb6e"];
+    const line = d3.lineRadial().angle((d,i)=>angleStep*i).radius(d=>rScale(d)).curve(d3.curveLinearClosed);
+
+    radarData.forEach((d,idx)=>{
+      g.append("path").datum(d.vals).attr("d",line).attr("fill",colors[idx]).attr("fill-opacity",0.15).attr("stroke",colors[idx]).attr("stroke-width",2.5);
+      d.vals.forEach((v,i)=>{
+        const angle=angleStep*i-Math.PI/2;
+        g.append("circle").attr("cx",Math.cos(angle)*rScale(v)).attr("cy",Math.sin(angle)*rScale(v)).attr("r",4)
+          .attr("fill",colors[idx]).attr("stroke","white").attr("stroke-width",1)
+          .on("mouseover",e=>showTip(e,`<strong>${d.genre}</strong><br/>${feats[i]}: <strong>${v.toFixed(2)}</strong>`))
+          .on("mousemove",moveTip).on("mouseleave",hideTip);
+      });
+      legendBox.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${colors[idx]}"></div>${d.genre}</div>`;
+    });
+  }
+}
+</script>
+</body>
+</html>
